@@ -8,17 +8,22 @@ use OneBot\Driver\Event\WebSocket\WebSocketCloseEvent;
 use OneBot\Driver\Event\WebSocket\WebSocketMessageEvent;
 use OneBot\Driver\Event\WebSocket\WebSocketOpenEvent;
 use OneBot\V12\Exception\OneBotException;
+use OneBot\V12\Object\ActionResponse;
 use OneBot\V12\Object\MessageSegment;
 use OneBot\V12\Object\OneBotEvent;
 use ZM\Annotation\AnnotationHandler;
 use ZM\Annotation\Framework\BindEvent;
 use ZM\Annotation\Framework\Init;
+use ZM\Annotation\Middleware\Middleware;
 use ZM\Annotation\OneBot\BotActionResponse;
 use ZM\Annotation\OneBot\BotEvent;
 use ZM\Annotation\OneBot\CommandArgument;
 use ZM\Container\ContainerRegistrant;
 use ZM\Context\BotContext;
+use ZM\Exception\OneBot12Exception;
 use ZM\Exception\WaitTimeoutException;
+use ZM\Middleware\WebSocketFilter;
+use ZM\Plugin\OneBot\BotMap;
 use ZM\Utils\ConnectionUtil;
 
 class GocqAdapter
@@ -47,29 +52,26 @@ class GocqAdapter
     {
         logger()->info('连接到 ob11');
         $request = $event->getRequest();
-        ob_dump($request);
         // 判断是不是 Gocq 或 OneBot 11 标准的连接。OB11 标准必须带有 X-Client-Role 和 X-Self-ID 两个头。
         if ($request->getHeaderLine('X-Client-Role') === 'Universal' && $request->getHeaderLine('X-Self-ID') !== '') {
             logger()->info('检测到 OneBot 11 反向 WS 连接 ' . $request->getHeaderLine('User-Agent'));
-            $info = ['gocq_impl' => 'go-cqhttp', 'self_id' => $request->getHeaderLine('X-Self-ID')];
+            $info = ['gocq_impl' => 'go-cqhttp', 'self_id' => $request->getHeaderLine('X-Self-ID'), 'onebot-version' => 11];
             // TODO: 验证 Token
             ConnectionUtil::setConnection($event->getFd(), $info);
             logger()->info('已接入 go-cqhttp 的反向 WS 连接，连接 ID 为 ' . $event->getFd());
+            BotMap::setCustomConnectContext($event->getSocketFlag(), $event->getFd(), new GoBotConnectContext($event->getSocketFlag(), $event->getFd()));
         }
     }
 
     /**
-     * @throws OneBotException
+     * @param WebSocketMessageEvent $event
+     * @throws \Throwable
+     * @throws OneBot12Exception
      */
     #[BindEvent(WebSocketMessageEvent::class)]
+    #[Middleware(WebSocketFilter::class, ['gocq_impl' => 'go-cqhttp'])]
     public function handleWSReverseMessage(WebSocketMessageEvent $event): void
     {
-        // 忽略非 gocq 的消息
-        $impl = ConnectionUtil::getConnection($event->getFd())['gocq_impl'] ?? null;
-        if ($impl === null) {
-            return;
-        }
-
         // 解析 Frame 到 UTF-8 JSON
         $body = $event->getFrame()->getData();
         $body = json_decode($body, true);
@@ -79,6 +81,7 @@ class GocqAdapter
         }
 
         if (isset($body['post_type'], $body['self_id'])) {
+            // 获取转换后的对象
             $ob12 = self::getConverter($event->getFd(), strval($body['self_id']))->convertEvent($body);
             if ($ob12 === null) {
                 logger()->debug('收到了不支持的 Event，丢弃此事件');
@@ -94,8 +97,10 @@ class GocqAdapter
             }
 
             // 绑定容器
-            ContainerRegistrant::registerOBEventServices($obj, GoBotContext::class);
-
+            ContainerRegistrant::registerOBEventServices($obj);
+            BotMap::registerBotWithFd($obj->self['user_id'], $obj->self['platform'], true, $event->getFd(), $event->getSocketFlag());
+            BotMap::setCustomContext($obj->self['user_id'], $obj->self['platform'], GoBotContext::class);
+            container()->set(BotContext::class, bot());
             // 调用 BotEvent 事件
             $handler = new AnnotationHandler(BotEvent::class);
             $handler->setRuleCallback(function (BotEvent $event) use ($obj) {
@@ -104,7 +109,7 @@ class GocqAdapter
                     && ($event->detail_type === null || $event->detail_type === $obj->detail_type);
             });
             try {
-                $handler->handleAll($obj);
+                $handler->handleAll();
             } catch (WaitTimeoutException $e) {
                 // 这里是处理 prompt() 下超时的情况的
                 if ($e->getTimeoutPrompt() === null) {
@@ -125,14 +130,17 @@ class GocqAdapter
                 $origin_action = self::$action_hold_list[$body['echo']];
                 unset(self::$action_hold_list[$body['echo']]);
                 $resp = GocqActionConverter::getInstance()->convertActionResponse11To12($body, $origin_action);
+
                 ContainerRegistrant::registerOBActionResponseServices($resp);
 
                 // 调用 BotActionResponse 事件
                 $handler = new AnnotationHandler(BotActionResponse::class);
                 $handler->setRuleCallback(function (BotActionResponse $event) use ($resp) {
-                    return $event->retcode === null || $event->retcode === $resp->retcode;
+                    return ($event->retcode === null || $event->retcode === $resp->retcode)
+                        && ($event->status === null || $event->status === $resp->status);
                 });
-                $handler->handleAll($resp);
+                container()->set(ActionResponse::class, $resp);
+                $handler->handleAll();
 
                 // 如果有协程，并且该 echo 记录在案的话，就恢复协程
                 BotContext::tryResume($resp);

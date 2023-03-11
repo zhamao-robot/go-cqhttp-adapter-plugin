@@ -1,16 +1,19 @@
 {
-  "name": "zhamao/go-cqhttp-adapter-plugin",
-  "license": "AGPL-3.0",
-  "autoload": {
-    "psr-4": {
-      "GocqAdapter\\": "src/"
+    "name": "zhamao/go-cqhttp-adapter-plugin",
+    "license": "AGPL-3.0",
+    "autoload": {
+        "psr-4": {
+            "GocqAdapter\\": "src/"
+        }
+    },
+    "require": {
+        "php": "~8.0 || ~8.1 || ~8.2"
+    },
+    "require-dev": {
+        "zhamao/framework": "dev-main"
+    },
+    "minimum-stability": "dev",
+    "extra": {
+        "zm-plugin-version": "1.0.0"
     }
-  },
-  "require": {
-    "php": "~8.0 || ~8.1"
-  },
-  "require-dev": {
-    "zhamao/framework": "dev-main"
-  },
-  "minimum-stability": "dev"
 }

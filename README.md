@@ -138,7 +138,7 @@ composer require zhamao/go-cqhttp-adapter-plugin
 - 如果请求动作是 `download_file`，响应中的 `file` 字段转换为 `file_id`。
 - 如果请求动作是 `set_group_name`、`set_group_leave`，参数保持不变。
 - 如果请求动作是 `get_status`，仅保留 `good` 字段，OB12 的 `bots` 字段值为 `[['impl' => 'go-cqhttp', 'version' => $user_agent, 'onebot_version' => '12']]`。
-- 如果请求动作是 `get_version_info`，`app_name` 转换为 `impl`，`app_version` 转换为 `version`，`onebot_version` 设置为 12，其他值丢弃。
+- 如果请求动作是 `get_version_info`，`app_name` 转换为 `impl`，且 impl 值后附加 `(go-cqhttp-adapter converted)`，`app_version` 转换为 `version`，`onebot_version` 设置为 12，其他值丢弃。
 
 ## 其他不兼容项
 

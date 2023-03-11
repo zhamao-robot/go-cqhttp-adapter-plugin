@@ -103,7 +103,7 @@ class GocqEventConverter
                 $message[$k] = ['type' => $type, 'data' => $data];
             }
         }
-        return $message;
+        return json_decode(json_encode($message), true);
     }
 
     /**

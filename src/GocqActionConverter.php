@@ -82,13 +82,17 @@ class GocqActionConverter
                     'thread_count' => $action->params['thread_count'] ?? 1,
                 ];
                 break;
+            case 'get_version':
+                $act = 'get_version_info';
+                $params = $action->params;
+                break;
             default:
                 // qq. 开头的动作，一律当作 gocq 的其他事件，这时候 params 原封不动发出
                 if (str_starts_with($action->action, 'qq.')) {
                     $act = substr($action->action, 3);
                     $params = $action->params;
                 } else {
-                    throw new OneBot12Exception('Current action cannot send to gocq');
+                    throw new OneBot12Exception('Current action cannot send to gocq: ' . $action->action);
                 }
                 break;
         }
@@ -178,6 +182,13 @@ class GocqActionConverter
                     'file_id' => $response['data']['file'],
                 ];
                 break;
+            case 'get_version_info':
+                $response_obj->data = [
+                    'impl' => $response['data']['app_name'] . ' (go-cqhttp-adapter converted)',
+                    'version' => $response['data']['app_version'],
+                    'onebot_version' => '12',
+                ];
+                break;
             case 'set_group_name':
             case 'set_group_leave':
             default:
@@ -195,6 +206,9 @@ class GocqActionConverter
     {
         $msgs = [];
         foreach ($message as $v) {
+            if (is_array($v)) {
+                $v = segment($v['type'], $v['data'] ?? []);
+            }
             $msgs[] = GocqSegmentConverter::getInstance()->parseSegment12To11($v);
         }
         return $msgs;
