@@ -50,7 +50,6 @@ class GocqAdapter
     #[BindEvent(WebSocketOpenEvent::class)]
     public function handleWSReverseOpen(WebSocketOpenEvent $event): void
     {
-        logger()->info('连接到 ob11');
         $request = $event->getRequest();
         // 判断是不是 Gocq 或 OneBot 11 标准的连接。OB11 标准必须带有 X-Client-Role 和 X-Self-ID 两个头。
         if ($request->getHeaderLine('X-Client-Role') === 'Universal' && $request->getHeaderLine('X-Self-ID') !== '') {
