@@ -76,6 +76,8 @@ class GocqSegmentConverter
     public function parseSegment11To12(string $type, array $data): array
     {
         switch ($type) {
+            case 'text':
+                return [$type, $data];
             case 'at':
                 $qq = $data['qq'];
                 unset($data['qq']);
