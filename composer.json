@@ -14,6 +14,6 @@
     },
     "minimum-stability": "dev",
     "extra": {
-        "zm-plugin-version": "1.0.0"
+        "zm-plugin-version": "1.1.1"
     }
 }
